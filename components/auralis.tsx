@@ -108,10 +108,7 @@ export default function Auralis() {
     [signedIn, setSignedIn] = useState(false),
     [demo, setDemo] = useState(!supabase);
   const [email, setEmail] = useState(""),
-    [password, setPassword] = useState(""),
-    [code, setCode] = useState(""),
-    [factor, setFactor] = useState(""),
-    [qr, setQr] = useState("");
+    [password, setPassword] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]),
     [view, setView] = useState("Overview"),
     [query, setQuery] = useState(""),
@@ -171,8 +168,6 @@ export default function Auralis() {
       setSignedIn(!!user);
       if (!user) {
         setAuthorized(false);
-        setFactor("");
-        setQr("");
         setReady(true);
         return;
       }
@@ -185,21 +180,9 @@ export default function Auralis() {
         await supabase?.auth.signOut();
         throw new Error(ownerError(owner.error));
       }
-      const { data, error } =
-        await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-      if (error) throw error;
-      if (data.currentLevel === "aal2") {
-        setAuthorized(true);
-        setDemo(false);
-        await load();
-      } else {
-        setAuthorized(false);
-        const factors = await supabase.auth.mfa.listFactors();
-        if (factors.error) throw factors.error;
-        setFactor(
-          factors.data.totp.find((f) => f.status === "verified")?.id ?? "",
-        );
-      }
+      await load();
+      setAuthorized(true);
+      setDemo(false);
     } catch (e) {
       setAuthorized(false);
       setNotice(
@@ -217,9 +200,6 @@ export default function Auralis() {
       if (event === "SIGNED_OUT") {
         setAuthorized(false);
         setSignedIn(false);
-        setFactor("");
-        setQr("");
-        setCode("");
         setPassword("");
         ++playRequest.current;
         audio.current?.pause();
@@ -303,55 +283,6 @@ export default function Auralis() {
           ? e.message
           : "Cannot reach Supabase. Check your connection and try again.",
       );
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function enroll() {
-    if (!supabase) return;
-    setBusy(true);
-    setNotice("");
-    try {
-      const existing = await supabase.auth.mfa.listFactors();
-      if (existing.error) throw existing.error;
-      for (const f of existing.data.all.filter(
-        (f) => f.factor_type === "totp" && f.status === "unverified",
-      )) {
-        const r = await supabase.auth.mfa.unenroll({ factorId: f.id });
-        if (r.error) throw r.error;
-      }
-      const { data, error } = await supabase.auth.mfa.enroll({
-        factorType: "totp",
-        friendlyName: "Auralis authenticator",
-      });
-      if (error) throw error;
-      setFactor(data.id);
-      setQr(data.totp.qr_code);
-    } catch (e) {
-      notify((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function verify(e: React.FormEvent) {
-    e.preventDefault();
-    if (!supabase || !factor) return;
-    setBusy(true);
-    setNotice("");
-    try {
-      const { error } = await supabase.auth.mfa.challengeAndVerify({
-        factorId: factor,
-        code,
-      });
-      if (error)
-        throw new Error(
-          "That code was not accepted. Use the latest authenticator code.",
-        );
-      setCode("");
-      setQr("");
-      await checkAuth();
-    } catch (e) {
-      notify((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -641,94 +572,38 @@ export default function Auralis() {
           <span className="eyebrow">
             <LockKeyhole size={14} /> YOUR PRIVATE SPACE
           </span>
-          <h2>{signedIn ? "One more layer of you." : "Welcome back."}</h2>
-          <p>
-            {signedIn
-              ? "Verify with your authenticator to unlock your library."
-              : "Sign in to your personal music and video library."}
-          </p>
-          {!signedIn ? (
-            <form onSubmit={login}>
-              <label>
-                Email
-                <input
-                  type="email"
-                  autoComplete="username"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
-              <label>
-                Password
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </label>
-              <button className="primary wide" disabled={busy}>
-                {busy ? (
-                  <LoaderCircle className="spin" />
-                ) : (
-                  <LockKeyhole size={16} />
-                )}{" "}
-                Unlock my space
-              </button>
-            </form>
-          ) : (
-            <>
-              {qr && (
-                <div className="qr">
-                  <img
-                    src={qr}
-                    alt="Scan this private QR code with your authenticator app"
-                  />
-                  <p>
-                    Scan with your authenticator, then enter its code. Never
-                    share this QR.
-                  </p>
-                </div>
-              )}
-              {factor ? (
-                <form onSubmit={verify}>
-                  <label>
-                    Authenticator code
-                    <input
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      pattern="[0-9]{6}"
-                      maxLength={6}
-                      required
-                      value={code}
-                      onChange={(e) =>
-                        setCode(e.target.value.replace(/\D/g, ""))
-                      }
-                    />
-                  </label>
-                  <button className="primary wide" disabled={busy}>
-                    Verify & enter <ArrowRight size={16} />
-                  </button>
-                </form>
+          <h2>Welcome back.</h2>
+          <p>Sign in to your personal music and video library.</p>
+          <form onSubmit={login}>
+            <label>
+              Email
+              <input
+                type="email"
+                autoComplete="username"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            <button className="primary wide" disabled={busy}>
+              {busy ? (
+                <LoaderCircle className="spin" />
               ) : (
-                <button
-                  className="primary wide"
-                  onClick={() => void enroll()}
-                  disabled={busy}
-                >
-                  Set up authenticator
-                </button>
-              )}
-              <button
-                className="text-button"
-                onClick={() => void supabase?.auth.signOut()}
-              >
-                Return to sign in
-              </button>
-            </>
-          )}
+                <LockKeyhole size={16} />
+              )}{" "}
+              Unlock my space
+            </button>
+          </form>
           <div className="auth-foot">
             <ShieldCheck size={16} /> One owner. No public sign-ups.
           </div>
@@ -1387,11 +1262,11 @@ export default function Auralis() {
             <p>
               {demo
                 ? "You’re exploring a local preview. Connect your own Supabase project to enable private cloud storage and sign-in."
-                : "Your library requires the owner account and authenticator verification. Playback uses temporary private links."}
+                : "Your library requires the owner account and password. Playback uses temporary private links."}
             </p>
             <div className="help-list">
               <p>
-                <LockKeyhole size={18} /> Password + authenticator MFA
+                <LockKeyhole size={18} /> Owner email and password
               </p>
               <p>
                 <ShieldCheck size={18} /> Private storage and database access
@@ -1403,7 +1278,7 @@ export default function Auralis() {
               </p>
             </div>
             <p className="subtle">
-              Keep your authenticator backed up securely. For lost access, use
+              Keep your password in a password manager. For lost access, use
               your Supabase dashboard to recover your account. Never share a
               playback link or this device while signed in.
             </p>

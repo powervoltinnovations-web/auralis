@@ -6,13 +6,12 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const object = process.env.SECURITY_TEST_OBJECT_PATH; // A known existing owner-uploaded file.
 const actors = [
   ["anonymous", key],
-  ["owner without MFA", process.env.SECURITY_TEST_OWNER_AAL1_TOKEN],
-  ["other account with MFA", process.env.SECURITY_TEST_OTHER_AAL2_TOKEN],
+  ["other account", process.env.SECURITY_TEST_OTHER_TOKEN],
 ];
-const owner = process.env.SECURITY_TEST_OWNER_AAL2_TOKEN;
+const owner = process.env.SECURITY_TEST_OWNER_TOKEN;
 if (!url || !key || !object || !owner || actors.some(([, token]) => !token)) {
   console.error(
-    "NOT RUN: configure the Supabase public URL/key, an existing SECURITY_TEST_OBJECT_PATH, and short-lived OWNER_AAL1, OWNER_AAL2, OTHER_AAL2 tokens using the SECURITY_TEST_*_TOKEN names documented in docs/SECURITY.md.",
+    "NOT RUN: configure the Supabase public URL/key, an existing SECURITY_TEST_OBJECT_PATH, and short-lived OWNER and OTHER tokens using the SECURITY_TEST_*_TOKEN names documented in docs/SECURITY.md.",
   );
   process.exit(2);
 }
@@ -92,5 +91,5 @@ const file = await fetch(playback, {
 assert.ok(file.ok, "Signed file cannot be played");
 await file.body?.cancel();
 console.log(
-  "PASS: private bucket rejects public download; MFA owner can read metadata, sign, and download the test file",
+  "PASS: private bucket rejects public download; password-authenticated owner can read metadata, sign, and download the test file",
 );

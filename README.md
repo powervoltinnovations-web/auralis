@@ -4,6 +4,8 @@
 
 Built with Next.js, React, TypeScript and Supabase. Deploy the frontend on Vercel and keep files in a private Supabase Storage bucket. No media files or secrets are included in this repository.
 
+Existing deployments: run [the password-only migration](supabase/migrations/20261022_password_only_owner.sql) in Supabase SQL Editor, then redeploy Vercel. See [upgrade steps](docs/SETUP-CHECKLIST.md#upgrading-from-the-authenticator-version).
+
 ## Run locally
 
 Requires Node.js 22 or newer.
@@ -23,7 +25,7 @@ For cloud mode, copy `.env.example` to `.env.local` and set your Supabase projec
 - MP3, AAC/M4A, WAV and MP4 uploads, capped at 50 MB per file.
 - Music and video playback, seek, volume, shuffle, repeat, and Media Session integration.
 - Search, favorites, one named personal collection, and confirmed file deletion.
-- One owner account with password login and required authenticator MFA.
+- One owner account with email/password login.
 - Private database and Storage policies, short-lived playback links and restrictive browser headers.
 
 Start with [your project setup checklist](docs/SETUP-CHECKLIST.md) for the exact Supabase and Vercel steps, existing-owner repair, and an optional encrypted account-creation helper.
@@ -42,7 +44,7 @@ npm run test:auth
 npm audit --omit=dev
 ```
 
-For a system Chromium installation, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium` before the browser test command. The preview browser suite creates its own explicit production preview build; the separate auth suite uses intercepted Supabase responses to test password/MFA behavior. Both override public configuration for their own test servers. They include a generated one-second WAV fixture, not copyrighted media.
+For a system Chromium installation, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium` before the browser test command. The preview browser suite creates its own explicit production preview build; the separate auth suite uses intercepted Supabase responses to test password-only owner login. Both override public configuration for their own test servers. They include a generated one-second WAV fixture, not copyrighted media.
 
 `npm test` executes the actual migration policies in embedded PostgreSQL (PGlite) with simulated Supabase authentication and storage schemas. It does not replace testing a real Supabase project. After configuring the cloud project, follow `docs/SECURITY.md` to run `npm run test:security:live` and the real-device checklist.
 

@@ -5,7 +5,7 @@
 Use your existing project: `https://xpmgbnrqskpkcqqorvus.supabase.co`.
 
 1. Open the SQL editor. If this is a fresh project, run `supabase/schema.sql` once. If the Auralis tables already exist, do not drop them or rerun the whole script blindly. Check that `app_owner`, `tracks`, `playlists`, the private `media` bucket and their policies exist.
-2. Under Authentication, enable email/password login and TOTP MFA. Disable new-user signup and anonymous sign-in. Do not enable Auth CAPTCHA until a CAPTCHA widget is integrated into this app.
+2. Under Authentication, enable email/password login. Disable new-user signup and anonymous sign-in. Do not enable Auth CAPTCHA until a CAPTCHA widget is integrated into this app.
 3. Under Authentication → Users, find the account you already created. Confirm its email if necessary, and copy its UUID. The login username is its **email**, not a Supabase dashboard username.
 4. Check ownership before changing anything:
 
@@ -20,7 +20,7 @@ Use your existing project: `https://xpmgbnrqskpkcqqorvus.supabase.co`.
    ```
 
    If a different owner is already present, stop and verify which account owns the library. Do not replace an owner or reset passwords to bypass access controls.
-5. Sign in using the Auth account email/password. First-time owners select **Set up authenticator**, scan the QR in an authenticator app, then enter its current six-digit code. Returning owners enter their authenticator code. Protect the authenticator backup.
+5. Sign in using the owner Auth account email/password. No authenticator code is required.
 
 ## Optional: generate a new owner account locally
 
@@ -58,8 +58,8 @@ If setup fails, read the specific error and check Authentication → Users and `
 
    This publishable key is designed to be visible in the browser. Database and storage policies enforce privacy. Never deploy `SUPABASE_SECRET_KEY`, a service-role key, the account password, `.secrets/`, or the credential-file passphrase. Do not set `NEXT_PUBLIC_ENABLE_LOCAL_PREVIEW` in your real deployment.
 3. Deploy, or **redeploy after changing variables**: `NEXT_PUBLIC` values are embedded during the build.
-4. Copy the HTTPS Vercel site origin into Supabase **Authentication → URL Configuration → Site URL**. This app uses email/password and MFA, not email-link callbacks.
-5. Open the deployed app in a private window. Confirm the email/password form appears; sign in, complete MFA, upload a small file, reload, and verify playback. Sign out and confirm the library is no longer visible. Do not make the Storage bucket public to fix access errors.
+4. Copy the HTTPS Vercel site origin into Supabase **Authentication → URL Configuration → Site URL**. This app uses email/password, not email-link callbacks.
+5. Open the deployed app in a private window. Confirm the email/password form appears; sign in, upload a small file, reload, and verify playback. Sign out and confirm the library is no longer visible. Do not make the Storage bucket public to fix access errors.
 
 ## If login still fails
 
@@ -69,9 +69,18 @@ If setup fails, read the specific error and check Authentication → Users and `
 | Local preview | In local development this is expected without project settings. In production, remove the explicit preview switch and redeploy with public variables. |
 | Incorrect email/password | Use the account under Authentication → Users in this exact project, not dashboard credentials. Use Supabase's supported recovery/admin process if needed. |
 | Email not confirmed | Confirm the account email in Supabase or through its confirmation email. |
-| Password accepted, library setup failed | Verify the schema exists and the `app_owner` select policy allows the logged-in owner to read its own row before MFA. |
+| Password accepted, library setup failed | Verify the schema exists and the `app_owner` select policy allows the logged-in owner to read its own row. |
 | Password accepted, not registered as owner | Link that Auth user's UUID in `app_owner`, after checking the existing owner. |
-| Authenticator code rejected | Use the latest code for Auralis; ensure the phone clock is automatic. Use Supabase administrator recovery if the authenticator was lost. |
 | Connection failure | Check the project is running, the public URL/key match, and browser/network policies permit the Supabase origin. |
 
-There is no promise that a compromised browser or device cannot steal an active session. Keep account MFA enabled, the bucket private, and owner/MFA database policies intact. No secret embedded or encrypted inside frontend JavaScript can safely serve as the owner password.
+There is no promise that a compromised browser or device cannot steal an active session. Keep a strong unique password, the bucket private, and owner database policies intact. No secret embedded or encrypted inside frontend JavaScript can safely serve as the owner password.
+
+
+## Upgrading from the authenticator version
+
+1. Run `supabase/migrations/20261022_password_only_owner.sql` in Supabase SQL Editor. It updates the shared owner-access function used by the existing database and storage policies. It preserves your owner UUID, media and tables and can be rerun safely. Do not rerun the fresh-install schema on an existing project.
+2. Deploy the latest `main` commit on Vercel (or wait for its connected GitHub deployment).
+3. Sign out and sign back in using your existing owner email/password. No password reset or new account is needed. Test an upload and playback.
+4. In Supabase Authentication → Users, select your own account and remove/reset the old MFA factor using the administrator controls. The website no longer requests or enrolls factors. This cleanup is especially relevant if an old enrollment secret was shared. Do not delete the user or change `app_owner`.
+
+Application login now relies on the owner's password. Keep MFA on your hosting/provider dashboard accounts if enabled; those accounts are separate from the Auralis login. Code deployment does not apply database migrations or change Supabase Auth factors automatically.

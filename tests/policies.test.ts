@@ -6,7 +6,7 @@ const owner = "11111111-1111-4111-8111-111111111111";
 const stranger = "22222222-2222-4222-8222-222222222222";
 const id = "33333333-3333-4333-8333-333333333333";
 const path = `${owner}/${id}.mp3`;
-test("PostgreSQL policies enforce owner + MFA on data and storage", async (t) => {
+test("PostgreSQL policies enforce owner-only access on data and storage", async (t) => {
   const db = new PGlite();
   await db.exec(
     `
@@ -79,27 +79,46 @@ test("PostgreSQL policies enforce owner + MFA on data and storage", async (t) =>
     },
   );
   await t.test(
-    "owner without MFA cannot upload or create metadata",
+    "fresh schema and repeatable migration allow password-only owner access",
     async () => {
+      const allowed = async () => {
+        await as("authenticated", owner, "aal1", async () => {
+          assert.equal(
+            (
+              await db.query<{ allowed: boolean }>(
+                "select public.is_library_owner() as allowed",
+              )
+            ).rows[0].allowed,
+            true,
+          );
+        });
+      };
+      await allowed();
+      // Reproduce the old installed function, then exercise the real upgrade SQL.
+      await db.exec(`create or replace function public.is_library_owner() returns boolean
+      language sql stable security definer set search_path = '' as $$
+      select (select auth.jwt()->>'aal') = 'aal2'
+      and exists (select 1 from public.app_owner where user_id = (select auth.uid())); $$;`);
       await as("authenticated", owner, "aal1", async () => {
-        assert.equal(
-          (await db.query("select * from public.app_owner")).rows.length,
-          1,
-        );
         await assert.rejects(insertTrack);
-        await assert.rejects(() =>
-          db.query(
-            "insert into storage.objects(bucket_id,name) values ('media',$1)",
-            [path],
-          ),
-        );
       });
+      const migration = readFileSync(
+        new URL(
+          "../supabase/migrations/20261022_password_only_owner.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      );
+      await db.exec(migration);
+      await allowed();
+      await db.exec(migration);
+      await allowed();
     },
   );
   await t.test(
-    "owner with MFA can create and read private files, tracks, and playlist",
+    "password-only owner can create and read private files, tracks, and playlist",
     async () => {
-      await as("authenticated", owner, "aal2", async () => {
+      await as("authenticated", owner, "aal1", async () => {
         await insertTrack();
         await db.query(
           "insert into storage.objects(bucket_id,name) values ('media',$1)",
@@ -170,30 +189,30 @@ test("PostgreSQL policies enforce owner + MFA on data and storage", async (t) =>
     },
   );
   await t.test(
-    "owner without MFA cannot read existing files or delete them",
+    "password-only owner reads existing files and an unregistered password-only account cannot",
     async () => {
-      await as("authenticated", owner, "aal1", async () => {
-        for (const table of [
-          "public.tracks",
-          "public.playlists",
-          "storage.objects",
-        ])
-          assert.equal(
-            (await db.query(`select * from ${table}`)).rows.length,
-            0,
-          );
-        assert.equal(
-          (await db.query("delete from storage.objects returning *")).rows
-            .length,
-          0,
-        );
-      });
+      for (const [uid, count] of [
+        [owner, 1],
+        [stranger, 0],
+      ] as const) {
+        await as("authenticated", uid, "aal1", async () => {
+          for (const table of [
+            "public.tracks",
+            "public.playlists",
+            "storage.objects",
+          ])
+            assert.equal(
+              (await db.query(`select * from ${table}`)).rows.length,
+              count,
+            );
+        });
+      }
     },
   );
   await t.test(
     "owner cannot bypass file paths, metadata size limits, or immutable storage",
     async () => {
-      await as("authenticated", owner, "aal2", async () => {
+      await as("authenticated", owner, "aal1", async () => {
         for (const bad of [
           `${stranger}/${id}.mp3`,
           `${owner}/../../payload.mp3`,
@@ -224,9 +243,9 @@ test("PostgreSQL policies enforce owner + MFA on data and storage", async (t) =>
     },
   );
   await t.test(
-    "verified owner can delete their files and metadata",
+    "password-only owner can delete their files and metadata",
     async () => {
-      await as("authenticated", owner, "aal2", async () => {
+      await as("authenticated", owner, "aal1", async () => {
         assert.equal(
           (await db.query("delete from storage.objects returning *")).rows
             .length,

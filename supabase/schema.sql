@@ -11,8 +11,7 @@ create policy owner_identity on public.app_owner for select to authenticated usi
 
 create or replace function public.is_library_owner() returns boolean
 language sql stable security definer set search_path = '' as $$
- select (select auth.jwt()->>'aal') = 'aal2'
- and exists (select 1 from public.app_owner where user_id = (select auth.uid()));
+ select exists (select 1 from public.app_owner where user_id = (select auth.uid()));
 $$;
 revoke all on function public.is_library_owner() from public;
 grant execute on function public.is_library_owner() to anon, authenticated;

@@ -10,8 +10,8 @@ type Scenario = {
 };
 
 async function mockSupabase(page: Page, scenario: Scenario = {}) {
-  let aal = "aal1";
-  let enrolled = !!scenario.enrolled;
+  const aal = "aal1";
+  const enrolled = !!scenario.enrolled;
   const factors = () =>
     enrolled
       ? [
@@ -73,32 +73,6 @@ async function mockSupabase(page: Page, scenario: Scenario = {}) {
           return fulfill({ code: "PGRST205", message: "Table missing" }, 404);
         return fulfill(scenario.nonOwner ? [] : [{ user_id: ownerId }]);
       }
-      if (path === "/auth/v1/factors" && req.method() === "POST")
-        return fulfill({
-          id: factorId,
-          type: "totp",
-          totp: {
-            qr_code:
-              '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32"/></svg>',
-            secret: "TESTONLY",
-            uri: "otpauth://totp/Test?secret=TESTONLY",
-          },
-        });
-      if (path.endsWith("/challenge"))
-        return fulfill({
-          id: "challenge-id",
-          expires_at: Date.now() / 1000 + 60,
-        });
-      if (path.endsWith("/verify")) {
-        if (req.postDataJSON().code !== "123456")
-          return fulfill(
-            { code: "mfa_verification_failed", msg: "Invalid code" },
-            422,
-          );
-        aal = "aal2";
-        enrolled = true;
-        return fulfill(session());
-      }
       if (path === "/rest/v1/tracks" || path === "/rest/v1/playlists")
         return fulfill([]);
       throw new Error(`Unexpected Supabase request: ${req.method()} ${path}`);
@@ -149,40 +123,30 @@ test("rejects an authenticated account that is not the owner", async ({
   ).toHaveCount(0);
 });
 
-test("new owner enrolls MFA, invalid code stays blocked, verified code opens library", async ({
-  page,
-}) => {
-  await mockSupabase(page);
-  await signIn(page);
-  await page.getByRole("button", { name: "Set up authenticator" }).click();
-  await expect(
-    page.getByAltText("Scan this private QR code with your authenticator app"),
-  ).toBeVisible();
-  await page.getByLabel("Authenticator code").fill("000000");
-  await page.getByRole("button", { name: "Verify & enter" }).click();
-  await expect(page.getByRole("status")).toContainText("code was not accepted");
-  await expect(
-    page.getByRole("button", { name: "Upload files", exact: true }),
-  ).toHaveCount(0);
-  await page.getByLabel("Authenticator code").fill("123456");
-  await page.getByRole("button", { name: "Verify & enter" }).click();
-  await expect(
-    page.getByRole("button", { name: "Upload files", exact: true }),
-  ).toBeVisible();
-});
-
-test("returning owner uses existing MFA and sign-out clears the enrollment state", async ({
-  page,
-}) => {
-  await mockSupabase(page, { enrolled: true });
-  await signIn(page);
-  await expect(page.getByLabel("Authenticator code")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Set up authenticator" }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Return to sign in" }).click();
-  await expect(
-    page.getByRole("button", { name: "Unlock my space" }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Authenticator code")).toHaveCount(0);
-});
+for (const enrolled of [false, true]) {
+  test(`owner enters with password only (existing factor: ${enrolled}) and signs out`, async ({
+    page,
+  }) => {
+    await mockSupabase(page, { enrolled });
+    await signIn(page);
+    await expect(
+      page.getByRole("button", { name: "Upload files", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Authenticator code")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Set up authenticator" }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "Upload files", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Help and security" }).click();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Unlock my space" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Upload files", exact: true }),
+    ).toHaveCount(0);
+  });
+}

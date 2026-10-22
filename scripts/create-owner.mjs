@@ -95,7 +95,7 @@ async function main() {
       "The generated password is encrypted in .secrets/owner-account.enc.json (local only, excluded from Git).",
     );
     console.log(
-      "Run npm run owner:credentials locally to decrypt it, move it into your password manager, and delete .env.admin.local. Complete authenticator enrollment on first sign-in.",
+      "Run npm run owner:credentials locally to decrypt it, move it into your password manager, and delete .env.admin.local. Sign in with the generated email and password.",
     );
   } finally {
     await handle.close();
